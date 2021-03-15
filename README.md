@@ -14,7 +14,7 @@ The following starts a cluster with a single master and 3 workers on Ubuntu 18.0
 
 > When the number of workers is not specified, the default is 2.
 
-The cluster is initialized using [cloud-init](https://cloudinit.readthedocs.io/en/latest/), and all the detailes live inside the [kubernetes.yaml])./kubernetes.yaml) file.
+The cluster is initialized using [cloud-init](https://cloudinit.readthedocs.io/en/latest/), and all the detailes live inside the [kubernetes.yaml](./kubernetes.yaml) file.
 
 ## Interact with the cluster
 
