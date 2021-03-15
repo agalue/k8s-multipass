@@ -1,0 +1,77 @@
+#cloud-config
+package_upgrade: true
+write_files:
+- owner: root:root
+  path: /etc/modules-load.d/containerd.conf
+  permissions: '0644'
+  content: |
+    overlay
+    br_netfilter
+- owner: root:root
+  path: /etc/sysctl.d/99-kubernetes-cri.conf
+  permissions: '0644'
+  content: |
+    net.bridge.bridge-nf-call-iptables  = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.ipv4.ip_forward                 = 1
+    net.ipv4.conf.all.rp_filter         = 1
+- owner: root:root
+  path: /usr/local/bin/kubernetes-setup-kubectl.sh
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    kubectl completion bash > /etc/bash_completion.d/kubectl
+    user=ubuntu
+    home=/home/$user
+    kube=$home/.kube
+    mkdir -p $kube
+    cp $KUBECONFIG $kube/config
+    chown -R $user:$user $kube
+    cat <<EOF >> $home/.bashrc
+    # kubectl
+    alias k=kubectl
+    complete -F __start_kubectl k
+    EOF
+- owner: root:root
+  path: /usr/local/bin/kubernetes-setup-master.sh # Only runs on k8smaster
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    if [ "$HOSTNAME" == "k8smaster" ]; then
+      kubeadm init --pod-network-cidr=172.16.0.0/16
+      export KUBECONFIG=/etc/kubernetes/admin.conf
+      kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+      kubeadm token create --print-join-command > /home/ubuntu/kubeadm_join_cmd.sh
+      kubernetes-setup-kubectl.sh
+    fi
+bootcmd:
+- curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+apt:
+  preserve_sources_list: true
+  sources:
+    kubernetes:
+      source: deb https://apt.kubernetes.io/ kubernetes-xenial main
+packages:
+- apt-transport-https
+- ca-certificates
+- curl
+- software-properties-common
+- containerd
+- kubelet
+- kubeadm
+- kubectl
+runcmd:
+- timedatectl set-timezone America/New_York
+- timedatectl set-ntp on
+- systemctl stop apparmor
+- systemctl disable apparmor
+- modprobe overlay
+- modprobe br_netfilter
+- sysctl --system
+- swapoff -a
+- sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+- mkdir -p /etc/containerd
+- containerd config default > /etc/containerd/config.toml
+- systemctl restart containerd
+- apt-mark hold kubelet kubeadm kubectl
+- kubernetes-setup-master.sh
