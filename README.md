@@ -6,13 +6,18 @@ Make sure you have [Multipass](https://multipass.run/) installed on your machine
 
 ## Start the cluster
 
-The following starts a cluster with a single master and 3 workers on Ubuntu 18.0.4, execute the following command:
+The following starts a cluster with a single master and 3 workers on Ubuntu with 2 CPUs and 8GB of RAM per instance, execute the following command:
 
 ```bash=
-./start.sh 3
+./start.sh --workers 3 --cpus 2 --memory 16g
 ```
 
-> When the number of workers is not specified, the default is 2.
+Default values are:
+
+* 2 worker nodes (`--workers`)
+* 2 CPUs per VM (`--cpus`)
+* 8 GB of RAM per VM (`--memory`)
+* The master node will use the same settings
 
 The cluster is initialized using [cloud-init](https://cloudinit.readthedocs.io/en/latest/), and all the detailes live inside the [kubernetes.yaml](./kubernetes.yaml) file.
 

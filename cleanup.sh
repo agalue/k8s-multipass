@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!env bash
 
 instances=$(multipass list | grep "^k8s" | awk '{print $1}')
 
