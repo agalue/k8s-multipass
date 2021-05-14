@@ -46,5 +46,3 @@ Execute the following command to delete the VMs and purge the state of `multipas
 ```bash=
 ./cleanup.sh
 ```
-
-> **WARNING**: If there are already deleted VMs, the purge command will permanently remove them.

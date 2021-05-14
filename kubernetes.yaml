@@ -29,7 +29,7 @@ write_files:
     home=/home/$user
     kube=$home/.kube
     mkdir -p $kube
-    cp $KUBECONFIG $kube/config
+    cp /etc/kubernetes/admin.conf $kube/config
     chown -R $user:$user $kube
     cat <<EOF >> $home/.bashrc
     alias k=kubectl
@@ -37,16 +37,29 @@ write_files:
     EOF
 
 - owner: root:root
-  path: /usr/local/bin/kubernetes-setup-master.sh # Only runs on k8smaster
+  path: /usr/local/bin/kubernetes-setup-master.sh # Should only runs on the master node
   permissions: '0755'
   content: |
     #!/bin/bash
-    kubeadm init --pod-network-cidr=172.16.0.0/16
+    kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
     export KUBECONFIG=/etc/kubernetes/admin.conf
     kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
     kubeadm token create --print-join-command > /home/ubuntu/kubeadm_join_cmd.sh
     kubernetes-setup-kubectl.sh
 
+- owner: root:root
+  path: /etc/kubernetes/kubeadm-config.yaml
+  permissions: '0644'
+  content: |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: ClusterConfiguration
+    apiServer:
+      extraArgs:
+        enable-admission-plugins: NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota
+    clusterName: kubernetes
+    networking:
+      podSubnet: 10.244.0.0/16
+ 
 bootcmd:
 - curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 
@@ -61,10 +74,11 @@ packages:
 - ca-certificates
 - curl
 - software-properties-common
+- gnupg2
 - containerd
-- kubelet
-- kubeadm
-- kubectl
+- [kubelet, 1.20.7-00]
+- [kubeadm, 1.20.7-00]
+- [kubectl, 1.20.7-00]
 
 runcmd:
 - timedatectl set-timezone America/New_York
