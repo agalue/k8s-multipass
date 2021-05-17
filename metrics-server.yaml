@@ -163,6 +163,10 @@ spec:
         volumeMounts:
         - mountPath: /tmp
           name: tmp-dir
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
       nodeSelector:
         kubernetes.io/os: linux
         kubernetes.io/hostname: k8smaster

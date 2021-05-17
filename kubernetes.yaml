@@ -44,6 +44,8 @@ write_files:
     kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
     export KUBECONFIG=/etc/kubernetes/admin.conf
     kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+    kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+    kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
     kubeadm token create --print-join-command > /home/ubuntu/kubeadm_join_cmd.sh
     kubernetes-setup-kubectl.sh
 
