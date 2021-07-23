@@ -23,10 +23,10 @@ cmd="kubeadm_join_cmd.sh"
 
 # Start and configure Master (do not change vm name)
 echo "Starting Master..."
-multipass launch -c $cpus -m $memory -n k8smaster --cloud-init kubernetes.yaml bionic
+multipass launch -c 2 -m $memory -n k8smaster --cloud-init kubernetes.yaml bionic
+multipass transfer ./metrics-server.yaml k8smaster:/home/ubuntu/metrics-server.yaml
 multipass exec k8smaster -- sudo kubernetes-setup-master.sh
 multipass transfer k8smaster:/home/ubuntu/$cmd .
-multipass transfer ./metrics-server.yaml k8smaster:/home/ubuntu/metrics-server.yaml
 
 # Start and configure Workers (do not change vm name)
 for i in $(seq 1 $workers); do

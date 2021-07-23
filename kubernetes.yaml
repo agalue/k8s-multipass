@@ -46,6 +46,7 @@ write_files:
     kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
     kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
     kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+    if [ -f /home/ubuntu/metrics-server.yaml ]; then kubectl apply -f /home/ubuntu/metrics-server.yaml; fi
     kubeadm token create --print-join-command > /home/ubuntu/kubeadm_join_cmd.sh
     kubernetes-setup-kubectl.sh
 
@@ -60,7 +61,7 @@ write_files:
         enable-admission-plugins: NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota
     clusterName: kubernetes
     networking:
-      podSubnet: 10.244.0.0/16
+      podSubnet: 10.244.0.0/16 # Because of flannel
  
 bootcmd:
 - curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
@@ -78,9 +79,9 @@ packages:
 - software-properties-common
 - gnupg2
 - containerd
-- [kubelet, 1.20.7-00]
-- [kubeadm, 1.20.7-00]
-- [kubectl, 1.20.7-00]
+- [kubelet, 1.21.3-00]
+- [kubeadm, 1.21.3-00]
+- [kubectl, 1.21.3-00]
 
 runcmd:
 - timedatectl set-timezone America/New_York
