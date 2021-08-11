@@ -41,7 +41,7 @@ write_files:
   content: |
     #!/bin/bash
     export KUBECONFIG=/etc/kubernetes/admin.conf
-    kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+    kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')&env.IPALLOC_RANGE=10.244.0.0/16"
 
 - owner: root:root
   path: /usr/local/bin/kubernetes-setup-single-master.sh
@@ -49,7 +49,7 @@ write_files:
   content: |
     #!/bin/bash
     ipaddr=$(ifconfig enp0s2 | grep 'inet[^6]' | awk '{print $2}')
-    kubeadm init --apiserver-advertise-address=$ipaddr --pod-network-cidr=10.32.0.0/16
+    kubeadm init --apiserver-advertise-address=$ipaddr --pod-network-cidr=10.244.0.0/16
     kubeadm token create --print-join-command > /tmp/setup_worker.sh
     /usr/local/bin/kubernetes-setup-cni.sh
     /usr/local/bin/kubernetes-setup-kubectl.sh
@@ -61,7 +61,7 @@ write_files:
     #!/bin/bash
     proxy_fqdn=${1-k8smain}
     ipaddr=$(ifconfig enp0s2 | grep 'inet[^6]' | awk '{print $2}')
-    kubeadm init --apiserver-advertise-address=$ipaddr --pod-network-cidr=10.32.0.0/16 --control-plane-endpoint "$proxy_fqdn:6443" --upload-certs
+    kubeadm init --apiserver-advertise-address=$ipaddr --pod-network-cidr=10.244.0.0/16 --control-plane-endpoint "$proxy_fqdn:6443" --upload-certs
     cert_key=$(sudo kubeadm init phase upload-certs --upload-certs | tail -n 1)
     kubeadm token create --print-join-command --certificate-key $cert_key > /tmp/setup_secondary_master.sh
     kubeadm token create --print-join-command > /tmp/setup_worker.sh
