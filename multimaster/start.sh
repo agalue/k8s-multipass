@@ -1,6 +1,8 @@
 #!env bash
 
-set -e
+set -euo pipefail
+trap 's=$?; echo >&2 "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+type multipass >/dev/null 2>&1 || { echo >&2 "multipass required but it's not installed; aborting."; exit 1; }
 
 # Configurable Environment variables
 masters="3"
@@ -9,8 +11,9 @@ cpus="2"
 memory="8"
 disk="20"
 
-if [ "$1" == "-h" ]; then
-  echo "Usage: start.sh [parameters]
+if [[ $# -gt 0 ]] && [[ "$1" == "-h" ]]; then
+  cat <<EOF
+Usage: start.sh [parameters]
 
 Parameters:
 --masters n   Number of masters (default: $masters)
@@ -18,12 +21,12 @@ Parameters:
 --cpus n      Number of CPUs per VM (default: $cpus)
 --memory n    Amount of Memory in GB per VM (default: $memory)
 --disk n      Amount of Disk in GB per worker VM (default: $disk)
-"
+EOF
   exit
 fi
 
 # Processing parameters
-while [ $# -gt 0 ]; do
+while [[ $# -gt 0 ]]; do
   if [[ $1 == *"--"* ]]; then
     param="${1/--/}"
     declare $param="$2"
@@ -56,8 +59,8 @@ if [[ ${masters} > 1 ]]; then
   total_cpus=$(($total_cpus + 1))
   total_memory=$(($total_memory + 1))
 fi
-echo "Creating cluster using ${masters} masters, ${workers} workers; each VM with ${cpus} CPUs, ${memory}GB of RAM; woreker will have ${disk}GB of Disk."
-echo "This environment requires ${nodes} VMs, using ${total_cpus} CPUs and ${total_memory}GB from your machine."
+echo "Creating cluster using ${masters} masters, ${workers} workers; each VM with ${cpus} CPUs, ${memory}GB of RAM; workers will have ${disk}GB of Disk."
+echo "This environment requires ${nodes} VMs, using ${total_cpus} CPUs and ${total_memory}GB of RAM from your machine."
 if [[ ${masters} > 1 ]]; then
   echo "An additional VM with 1 CPU and 1GB of RAM will be started as the Load Balancer."
 fi
@@ -79,14 +82,14 @@ fi
 for i in $(seq 1 ${masters}); do
   master="${master_prefix}${i}"
   echo "Starting Master ${master}..."
-  multipass launch -c ${cpus} -m ${memory}g -n ${master} --cloud-init kubernetes.yaml bionic
+  multipass launch -c ${cpus} -m ${memory}g -n ${master} --cloud-init kubernetes.yaml
 done
 
 # Start Workers (do not change vm name)
 for i in $(seq 1 ${workers}); do
   worker="${worker_prefix}${i}"
   echo "Starting Worker ${worker}..."
-  multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml bionic
+  multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml
 done
 
 # Update the /etc/hosts file on each VM (and configure proxy)
@@ -140,5 +143,5 @@ done
 
 # Finalizing
 rm -f ./setup_secondary_master.sh ./setup_worker.sh ${hosts_file}
-echo "Make sure to copy the kube_config file to ~/.kube/config"
+echo "Make sure to copy the kube_config.conf file to ~/.kube/config"
 echo "Done!"

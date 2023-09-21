@@ -14,7 +14,7 @@ write_files:
     fi
     masters=${1-3}
     master_prefix=${2-k8smaster}
-    proxy_ip=$(ifconfig enp0s2 | grep 'inet[^6]' | awk '{print $2}')
+    proxy_ip=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
     cat <<EOF | sudo tee -a /etc/haproxy/haproxy.cfg
     frontend kubernetes-frontend

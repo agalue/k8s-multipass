@@ -8,15 +8,28 @@ write_files:
   path: /etc/modules-load.d/containerd.conf
   permissions: '0644'
   content: |
+    overlay
     br_netfilter
 
 - owner: root:root
-  path: /etc/sysctl.d/99-kubernetes-cri.conf
+  path: /etc/sysctl.d/k8s.conf
   permissions: '0644'
   content: |
     net.bridge.bridge-nf-call-iptables  = 1
     net.bridge.bridge-nf-call-ip6tables = 1
     net.ipv4.ip_forward                 = 1
+
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#dpkg-k8s-package-repo
+- owner: root:root
+  path: /usr/local/bin/kubernetes-install.sh
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+    apt-get update
+    apt-get install -y kubelet kubeadm kubectl
+    apt-mark hold kubelet kubeadm kubectl
 
 - owner: root:root
   path: /usr/local/bin/kubernetes-setup-kubectl.sh
@@ -41,14 +54,15 @@ write_files:
   content: |
     #!/bin/bash
     export KUBECONFIG=/etc/kubernetes/admin.conf
-    kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')&env.IPALLOC_RANGE=10.244.0.0/16"
+    kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+    curl https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml | sed '/cidr/s/192.168.0.0/10.244.0.0/' | kubectl apply -f -
 
 - owner: root:root
   path: /usr/local/bin/kubernetes-setup-single-master.sh
   permissions: '0755'
   content: |
     #!/bin/bash
-    ipaddr=$(ifconfig enp0s2 | grep 'inet[^6]' | awk '{print $2}')
+    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     kubeadm init --apiserver-advertise-address=$ipaddr --pod-network-cidr=10.244.0.0/16
     kubeadm token create --print-join-command > /tmp/setup_worker.sh
     /usr/local/bin/kubernetes-setup-cni.sh
@@ -60,7 +74,7 @@ write_files:
   content: |
     #!/bin/bash
     proxy_fqdn=${1-k8smain}
-    ipaddr=$(ifconfig enp0s2 | grep 'inet[^6]' | awk '{print $2}')
+    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     kubeadm init --apiserver-advertise-address=$ipaddr --pod-network-cidr=10.244.0.0/16 --control-plane-endpoint "$proxy_fqdn:6443" --upload-certs
     cert_key=$(sudo kubeadm init phase upload-certs --upload-certs | tail -n 1)
     kubeadm token create --print-join-command --certificate-key $cert_key > /tmp/setup_secondary_master.sh
@@ -73,38 +87,12 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    if [ -f "/tmp/setup_secondary_master.sh" ]; then
+    if ! [ -f "/tmp/setup_secondary_master.sh" ]; then
       echo "Cannot find join script..."
       exit
     fi
-    ipaddr=$(ifconfig enp0s2 | grep 'inet[^6]' | awk '{print $2}')
+    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     $(cat /tmp/setup_secondary_master.sh) --apiserver-advertise-address=$ipaddr
-
-- owner: root:root
-  path: /usr/local/bin/kubernetes-setup-kubectl.sh
-  permissions: '0755'
-  content: |
-    #!/bin/bash
-    kubectl completion bash > /etc/bash_completion.d/kubectl
-    user=ubuntu
-    home=/home/$user
-    kube=$home/.kube
-    mkdir -p $kube
-    cp /etc/kubernetes/admin.conf $kube/config
-    chown -R $user:$user $kube
-    cat <<EOF >> $home/.bashrc
-    alias k=kubectl
-    complete -F __start_kubectl k
-    EOF
-
-bootcmd:
-- curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-
-apt:
-  preserve_sources_list: true
-  sources:
-    kubernetes:
-      source: deb https://apt.kubernetes.io/ kubernetes-xenial main
 
 packages:
 - net-tools
@@ -114,20 +102,18 @@ packages:
 - software-properties-common
 - gnupg2
 - containerd
-- [kubelet, 1.21.3-00]
-- [kubeadm, 1.21.3-00]
-- [kubectl, 1.21.3-00]
 
 runcmd:
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
 - systemctl stop apparmor
 - systemctl disable apparmor
+- modprobe overlay
 - modprobe br_netfilter
 - sysctl --system
 - swapoff -a
 - sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 - mkdir -p /etc/containerd
-- containerd config default > /etc/containerd/config.toml
+- containerd config default | sed '/SystemdCgroup/s/false/true/' > /etc/containerd/config.toml
 - systemctl restart containerd
-- apt-mark hold kubelet kubeadm kubectl
+- kubernetes-install.sh
