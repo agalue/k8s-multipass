@@ -1,6 +1,8 @@
 #!env bash
 
-set -e
+set -euo pipefail
+trap 's=$?; echo >&2 "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+type multipass >/dev/null 2>&1 || { echo >&2 "multipass required but it's not installed; aborting."; exit 1; }
 
 # Environment variables
 workers="2"
@@ -18,11 +20,11 @@ while [ $# -gt 0 ]; do
 done
 
 # Validation
-if [ $cpu -lt 2 ]; then
+if [ ${cpus} -lt 2 ]; then
   echo "ERROR: A minimum of 2 CPUs per VM is required."
   exit 1
 fi
-if [ $memory -lt 2 ]; then
+if [ ${memory} -lt 2 ]; then
   echo "ERROR: A minimum of 2GB of RAM per VM is required."
   exit 1
 fi
@@ -30,20 +32,19 @@ fi
 echo "Creating cluster using: workers=${workers}, cpus=${cpus}, memory=${memory}g, disk=${disk}g"
 
 # Temporal variables
-cmd="kubeadm_join_cmd.sh"
+cmd="setup_worker.sh"
 
 # Start and configure Master (do not change vm name)
 echo "Starting Master..."
-multipass launch -c ${cpus} -m ${memory}g -n k8smaster --cloud-init kubernetes.yaml bionic
-multipass transfer ./metrics-server.yaml k8smaster:/home/ubuntu/metrics-server.yaml
+multipass launch -c ${cpus} -m ${memory}g -n k8smaster --cloud-init kubernetes.yaml
 multipass exec k8smaster -- sudo kubernetes-setup-master.sh
-multipass transfer k8smaster:/home/ubuntu/${cmd} .
+multipass transfer k8smaster:/tmp/${cmd} .
 
 # Start and configure Workers (do not change vm name)
 for i in $(seq 1 ${workers}); do
   worker="k8sworker${i}"
   echo "Starting Worker ${worker}..."
-  multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml bionic
+  multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml
   multipass transfer ./${cmd} ${worker}:/tmp/
   multipass exec ${worker} -- sudo bash /tmp/${cmd}
 done

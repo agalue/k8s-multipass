@@ -7,21 +7,28 @@ write_files:
   path: /etc/modules-load.d/containerd.conf
   permissions: '0644'
   content: |
+    overlay
     br_netfilter
 
 - owner: root:root
-  path: /etc/sysctl.d/99-kubernetes-cri.conf
+  path: /etc/sysctl.d/k8s.conf
   permissions: '0644'
   content: |
     net.bridge.bridge-nf-call-iptables  = 1
     net.bridge.bridge-nf-call-ip6tables = 1
     net.ipv4.ip_forward                 = 1
 
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#dpkg-k8s-package-repo
 - owner: root:root
-  path: /etc/sysctl.d/99-kubernetes-calico.conf
-  permissions: '0644'
+  path: /usr/local/bin/kubernetes-install.sh
+  permissions: '0755'
   content: |
-    net.ipv4.conf.all.rp_filter = 1
+    #!/bin/bash
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+    apt-get update
+    apt-get install -y kubelet kubeadm kubectl
+    apt-mark hold kubelet kubeadm kubectl
 
 - owner: root:root
   path: /usr/local/bin/kubernetes-setup-kubectl.sh
@@ -41,63 +48,45 @@ write_files:
     EOF
 
 - owner: root:root
+  path: /usr/local/bin/kubernetes-setup-cni.sh
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+    curl https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml | sed '/cidr/s/192.168.0.0/10.244.0.0/' | kubectl apply -f -
+
+- owner: root:root
   path: /usr/local/bin/kubernetes-setup-master.sh # Should only runs on the master node
   permissions: '0755'
   content: |
     #!/bin/bash
-    kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
-    export KUBECONFIG=/etc/kubernetes/admin.conf
-    curl https://docs.projectcalico.org/manifests/calico.yaml 2>/dev/null | sed -E '/CALICO_IPV4POOL_CIDR|192.168.0.0/s/[#] //' | sed 's/192.168.0.0/10.244.0.0/' | kubectl apply -f -
-    kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
-    kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
-    if [ -f /home/ubuntu/metrics-server.yaml ]; then kubectl apply -f /home/ubuntu/metrics-server.yaml; fi
-    kubeadm token create --print-join-command > /home/ubuntu/kubeadm_join_cmd.sh
-    kubernetes-setup-kubectl.sh
-
-- owner: root:root
-  path: /etc/kubernetes/kubeadm-config.yaml
-  permissions: '0644'
-  content: |
-    apiVersion: kubeadm.k8s.io/v1beta2
-    kind: ClusterConfiguration
-    apiServer:
-      extraArgs:
-        enable-admission-plugins: NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota
-    clusterName: kubernetes
-    networking:
-      podSubnet: 10.244.0.0/16 # Must match CALICO_IPV4POOL_CIDR
- 
-bootcmd:
-- curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-
-apt:
-  preserve_sources_list: true
-  sources:
-    kubernetes:
-      source: deb https://apt.kubernetes.io/ kubernetes-xenial main
+    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
+    kubeadm init --apiserver-advertise-address=$ipaddr --pod-network-cidr=10.244.0.0/16
+    kubeadm token create --print-join-command > /tmp/setup_worker.sh
+    /usr/local/bin/kubernetes-setup-cni.sh
+    /usr/local/bin/kubernetes-setup-kubectl.sh
 
 packages:
+- net-tools
 - apt-transport-https
 - ca-certificates
 - curl
 - software-properties-common
 - gnupg2
 - containerd
-- [kubelet, 1.21.3-00]
-- [kubeadm, 1.21.3-00]
-- [kubectl, 1.21.3-00]
 
 runcmd:
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
 - systemctl stop apparmor
 - systemctl disable apparmor
+- modprobe overlay
 - modprobe br_netfilter
 - sysctl --system
 - swapoff -a
 - sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 - mkdir -p /etc/containerd
-- containerd config default > /etc/containerd/config.toml
+- containerd config default | sed '/SystemdCgroup/s/false/true/' > /etc/containerd/config.toml
 - systemctl restart containerd
-- apt-mark hold kubelet kubeadm kubectl
-
+- kubernetes-install.sh
