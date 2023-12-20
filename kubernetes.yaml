@@ -38,6 +38,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
+    set -e
     DEBIAN_FRONTEND=noninteractive
     VERSION=v1.29
     curl -fsSL https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -50,6 +51,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
+    set -e
     kubectl completion bash > /etc/bash_completion.d/kubectl
     user=ubuntu
     home=/home/$user
@@ -67,6 +69,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
+    set -e
     snap install helm --classic
     helm repo add cilium https://helm.cilium.io/
     helm repo update
@@ -74,15 +77,42 @@ write_files:
     ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     helm install cilium cilium/cilium -n kube-system --set kubeProxyReplacement=true --set k8sServiceHost=${ipaddr} --set k8sServicePort=6443 --wait
 
-- path: /usr/local/bin/kubernetes-setup-master.sh
+- path: /usr/local/bin/kubernetes-setup-single-master.sh
   permissions: '0755'
   content: |
     #!/bin/bash
+    set -e
     ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     kubeadm init --apiserver-advertise-address=${ipaddr} --pod-network-cidr=10.244.0.0/16 --skip-phases=addon/kube-proxy
     kubeadm token create --print-join-command > /tmp/setup_worker.sh
     /usr/local/bin/kubernetes-setup-cni.sh
     /usr/local/bin/kubernetes-setup-kubectl.sh
+
+- path: /usr/local/bin/kubernetes-setup-primary-master.sh
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    set -e
+    proxy_fqdn=${1-k8smain.local}
+    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
+    kubeadm init --apiserver-advertise-address=${ipaddr} --pod-network-cidr=10.244.0.0/16 --skip-phases=addon/kube-proxy --control-plane-endpoint=${proxy_fqdn}:6443 --upload-certs
+    cert_key=$(sudo kubeadm init phase upload-certs --upload-certs | tail -n 1)
+    kubeadm token create --print-join-command --certificate-key $cert_key > /tmp/setup_secondary_master.sh
+    kubeadm token create --print-join-command > /tmp/setup_worker.sh
+    /usr/local/bin/kubernetes-setup-cni.sh
+    /usr/local/bin/kubernetes-setup-kubectl.sh
+
+- path: /usr/local/bin/kubernetes-setup-secondary-master.sh
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    set -e
+    if ! [ -f "/tmp/setup_secondary_master.sh" ]; then
+      echo "Cannot find join script..."
+      exit
+    fi
+    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
+    $(cat /tmp/setup_secondary_master.sh) --apiserver-advertise-address=${ipaddr}
 
 packages:
 - net-tools
