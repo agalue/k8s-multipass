@@ -1,37 +1,57 @@
 #cloud-config
 package_upgrade: true
-manage_etc_hosts: false
 
 write_files:
+
+- path: /etc/systemd/resolved.conf
+  append: true
+  content: |
+    MulticastDNS=yes
+
+- path: /etc/systemd/system/mdns@.service
+  content: |
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/bin/resolvectl mdns %i yes
+    After=sys-subsystem-net-devices-%i.device
+    [Install]
+    WantedBy=sys-subsystem-net-devices-%i.device
+
+- path: /etc/sysctl.d/no-ipv6.conf
+  content: |
+    net.ipv6.conf.all.disable_ipv6     = 1
+    net.ipv6.conf.default.disable_ipv6 = 1
+
 - owner: root:root
   path: /etc/haproxy/setup.sh
   permissions: '0755'
   content: |
     #!/bin/bash
+    set -e
     if [ -f "/etc/haproxy.configured" ]; then
       echo "Already configured."
       exit
     fi
     masters=${1-3}
     master_prefix=${2-k8smaster}
-    proxy_ip=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
     cat <<EOF | sudo tee -a /etc/haproxy/haproxy.cfg
-    frontend kubernetes-frontend
-        bind $proxy_ip:6443
+    frontend kube-apiserver
+        bind :6443
         mode tcp
         option tcplog
-        default_backend kubernetes-backend
-    backend kubernetes-backend
+        default_backend kube-apiserver
+    backend kube-apiserver
         mode tcp
         option tcp-check
         balance roundrobin
+        default-server inter 10s downinter 5s rise 2 fall 2 slowstart 60s maxconn 250 maxqueue 256 weight 100
     EOF
     for i in $(seq 1 ${masters}); do
       master="${master_prefix}${i}"
-      ip=$(grep ${master} /etc/hosts | awk '{print $1}')
+      ip=$(dig ${master}.local +short)
       cat <<EOF | sudo tee -a /etc/haproxy/haproxy.cfg
-        server ${master} ${ip}:6443 check fall 3 rise 2
+        server ${master} ${ip}:6443 check
     EOF
     done
     touch /etc/haproxy.configured
@@ -42,6 +62,10 @@ packages:
 - haproxy
 
 runcmd:
+- systemctl restart systemd-sysctl
+- systemctl restart systemd-resolved.service
+- systemctl start mdns@ens3.service
+- systemctl enable mdns@ens3.service
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
 - systemctl stop apparmor

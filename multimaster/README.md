@@ -1,15 +1,19 @@
 # Kubernetes Cluster with Multipass
 
+This repository contains a simple script to set up a simple Kubernetes cluster via Kubeadm for learning purposes. It deploys the latest version (v1.29) using Cilium as CNI without Kubeproxy. It will create Ubuntu 22.04 LTS VMs on your machine using Multipass.
+
+This allows you to deploy either a single master or a multi-master deployment.
+
 ## Requirements
 
 Make sure you have [Multipass](https://multipass.run/) installed on your machine.
 
 ## Start the cluster
 
-The following starts a cluster with a single master and 3 workers on Ubuntu with 2 CPUs and 8GB of RAM per instance, execute the following command:
+The following starts a cluster with 3 masters behind a proxy and 3 workers with 2 CPUs and 16GB of RAM per instance:
 
 ```bash=
-./start.sh --workers 3 --cpus 2 --memory 16g
+./start.sh --workers 3 --cpus 2 --memory 16
 ```
 
 Default values are:
@@ -18,8 +22,8 @@ Default values are:
 * 2 worker nodes (`--workers`)
 * 2 CPUs per VM (`--cpus`)
 * 8 GB of RAM per VM (`--memory`)
-* 20 GB for Disk per Worker VM (`--disk`)
-* The master node will use the same settings
+* 50 GB for Disk per worker VM (`--disk`)
+* All node kinds share the same CPU and Memory.
 
 The cluster is initialized using [cloud-init](https://cloudinit.readthedocs.io/en/latest/), and all the detailes live inside the [kubernetes.yaml](./kubernetes.yaml) file.
 
@@ -36,11 +40,11 @@ From there, `kubectl` is already configured for the default user (i.e., `ubuntu`
 However, if you choose to have multiple master servers, an additional load balancer was configured, and you can do the following from hour machine (assuming you have `kubectl` installed):
 
 ```bash=
-KUBECONFIG=$(pwd)/kube-config.yaml
+export KUBECONFIG=$(pwd)/kube_config.conf
 kubectl get nodes
 ```
 
-`kube_config.conf` was created by the `start.sh` script and should use the LB to access the cluster.
+> The `kube_config.conf` file was created by the `start.sh` script and should use the LB to access the cluster.
 
 ## Clean up
 
