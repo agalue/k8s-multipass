@@ -1,5 +1,7 @@
 # Kubernetes Cluster with Multipass
 
+This repository contains a simple script to set up a simple Kubernetes cluster via Kubeadm for learning purposes. It deploys the latest version (v1.29) using Cilium as CNI without Kubeproxy. It will create Ubuntu 22.04 LTS VMs on your machine using Multipass.
+
 ## Requirements
 
 Make sure you have [Multipass](https://multipass.run/) installed on your machine.
@@ -33,10 +35,10 @@ From there, `kubectl` is already configured for the default user (i.e., `ubuntu`
 
 ```bash=
 ubuntu@k8smaster:~$ k get nodes -o wide
-NAME         STATUS   ROLES                  AGE   VERSION   INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION       CONTAINER-RUNTIME
-k8smaster    Ready    control-plane,master   56m   v1.20.4   192.168.75.6    <none>        Ubuntu 18.04.5 LTS   4.15.0-136-generic   containerd://1.3.3
-k8sworker1   Ready    <none>                 11m   v1.20.4   192.168.75.11   <none>        Ubuntu 18.04.5 LTS   4.15.0-136-generic   containerd://1.3.3
-k8sworker2   Ready    <none>                 10m   v1.20.4   192.168.75.12   <none>        Ubuntu 18.04.5 LTS   4.15.0-136-generic   containerd://1.3.3
+NAME         STATUS   ROLES           AGE     VERSION   INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION      CONTAINER-RUNTIME
+k8smaster    Ready    control-plane   4m31s   v1.29.0   192.168.65.39   <none>        Ubuntu 22.04.3 LTS   5.15.0-91-generic   containerd://1.7.2
+k8sworker1   Ready    <none>          2m23s   v1.29.0   192.168.65.40   <none>        Ubuntu 22.04.3 LTS   5.15.0-91-generic   containerd://1.7.2
+k8sworker2   Ready    <none>          34s     v1.29.0   192.168.65.41   <none>        Ubuntu 22.04.3 LTS   5.15.0-91-generic   containerd://1.7.2
 ```
 
 ## Clean up
