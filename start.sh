@@ -35,7 +35,7 @@ echo "Creating cluster using: workers=${workers}, cpus=${cpus}, memory=${memory}
 cmd="setup_worker.sh"
 
 # Start and configure Master (do not change vm name)
-echo "Starting Master..."
+echo "Creating Master..."
 multipass launch -c ${cpus} -m ${memory}g -n k8smaster --cloud-init kubernetes.yaml
 multipass exec k8smaster -- sudo kubernetes-setup-master.sh
 multipass transfer k8smaster:/tmp/${cmd} .
@@ -43,7 +43,7 @@ multipass transfer k8smaster:/tmp/${cmd} .
 # Start and configure Workers (do not change vm name)
 for i in $(seq 1 ${workers}); do
   worker="k8sworker${i}"
-  echo "Starting Worker ${worker}..."
+  echo "Creating Worker ${worker}..."
   multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml
   multipass transfer ./${cmd} ${worker}:/tmp/
   multipass exec ${worker} -- sudo bash /tmp/${cmd}
