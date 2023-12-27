@@ -1,12 +1,12 @@
 # Kubernetes Cluster with Multipass
 
-This repository contains a simple script to set up a simple Kubernetes cluster via Kubeadm for learning purposes. It deploys the latest version (v1.29) using Cilium as CNI without Kubeproxy. It will create Ubuntu 22.04 LTS VMs on your machine using Multipass.
+This repository contains a script to set up a simple Kubernetes cluster via [Kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/) for learning purposes. It deploys Kubernetes version 1.29 using [Cilium](https://cilium.io/) as CNI without Kubeproxy. It will create Ubuntu 22.04 LTS VMs on your machine using [Multipass](https://multipass.run/).
 
 This allows you to deploy either a single master or a multi-master deployment.
 
 ## Requirements
 
-Make sure you have [Multipass](https://multipass.run/) installed on your machine.
+Make sure you have [multipass](https://multipass.run/) and [kubectl](https://kubectl.docs.kubernetes.io/) installed on your machine.
 
 ## Start the cluster
 
