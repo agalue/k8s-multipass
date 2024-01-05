@@ -99,7 +99,11 @@ write_files:
     clusterName=${hostname%-*}
     podSubnet=${1-10.244.0.0/16}
     serviceSubnet=${2-10.96.0.0/12}
-    ctrlEndpoint=${3-$ipaddr}
+    if [ "${3}" == "" ]; then
+      ctrlEndpoint=$ipaddr
+    else
+      ctrlEndpoint=$(dig ${3} +short)
+    fi
     cat <<EOF > /etc/kubernetes/kubeadm-config.yaml
     ---
     apiVersion: kubeadm.k8s.io/v1beta3

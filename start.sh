@@ -97,17 +97,14 @@ for i in $(seq 1 ${workers}); do
   multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml
 done
 
-# Configure Kubeadm
-master="${master_prefix}1"
-if [[ ${masters} > 1 ]]; then ctrlEndpoint="${proxy_hostname}.local"; else ctrlEndpoint=""; fi
-multipass exec ${master} -- sudo kubernetes-create-config.sh ${podCIDR} ${svcCIDR} ${ctrlEndpoint}
-
 # Configure Control Plane nodes
+master="${master_prefix}1"
 if [[ ${masters} > 1 ]]; then
   echo "Configuring Load Balancer..."
   multipass launch -c 1 -m 1g -n ${proxy_hostname} --cloud-init load-balancer.yaml
   multipass exec ${proxy_hostname} -- sudo /etc/haproxy/setup.sh ${masters} ${master_prefix}
   echo "Initializing primary master node ${master}..."
+  multipass exec ${master} -- sudo kubernetes-create-config.sh ${podCIDR} ${svcCIDR} ${proxy_hostname}.local
   multipass exec ${master} -- sudo kubernetes-setup-primary-master.sh ${id}
   multipass transfer ${master}:/tmp/setup_secondary_master.sh .
   multipass transfer ${master}:/tmp/setup_worker.sh .
@@ -119,6 +116,7 @@ if [[ ${masters} > 1 ]]; then
   done
 else
   echo "Initializing single master node ${master}..."
+  multipass exec ${master} -- sudo kubernetes-create-config.sh ${podCIDR} ${svcCIDR}
   multipass exec ${master} -- sudo kubernetes-setup-single-master.sh ${id}
   multipass transfer ${master}:/tmp/setup_worker.sh .
 fi
