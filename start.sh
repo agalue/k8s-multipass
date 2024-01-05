@@ -5,6 +5,10 @@ trap 's=$?; echo >&2 "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
 type multipass >/dev/null 2>&1 || { echo >&2 "multipass required but it's not installed; aborting."; exit 1; }
 
 # Configurable Environment variables
+domain="k8s"
+id="1"
+podCIDR="10.244.0.0/16"
+svcCIDR="10.96.0.0/12"
 masters="3"
 workers="2"
 cpus="2"
@@ -16,11 +20,15 @@ if [[ $# -gt 0 ]] && [[ "$1" == "-h" ]]; then
 Usage: start.sh [parameters]
 
 Parameters:
---masters n   Number of masters (default: $masters)
---workers n   Number of workers (default: $workers)
---cpus n      Number of CPUs per VM (default: $cpus)
---memory n    Amount of Memory in GB per VM (default: $memory)
---disk n      Amount of Disk in GB per worker VM (default: $disk)
+--domain txt   Kubernetes Cluster Name and Hostname Prefix for all nodes (default: $domain)
+--id num       Cilium ID for ClusterMesh (default: $id)
+--podCIDR txt  Pod Network CIDR (default: $podCIDR)
+--svcCIDR txt  Service Network CIDR (default: $svcCIDR)
+--masters num  Number of masters (default: $masters)
+--workers num  Number of workers (default: $workers)
+--cpus num     Number of CPUs per VM (default: $cpus)
+--memory num   Amount of Memory in GB per VM (default: $memory)
+--disk num     Amount of Disk in GB per worker VM (default: $disk)
 EOF
   exit
 fi
@@ -45,9 +53,10 @@ if [[ ${memory} < 2 ]]; then
 fi
 
 # Internal Fixed Variables
-proxy_hostname="k8smain"
-master_prefix="k8smaster"
-worker_prefix="k8sworker"
+proxy_hostname="${domain}-main"
+master_prefix="${domain}-master"
+worker_prefix="${domain}-worker"
+kube_config="${domain}_kube_config.conf"
 
 # Infrastructure Verification
 nodes=$(($masters + $workers))
@@ -76,6 +85,9 @@ for i in $(seq 1 ${masters}); do
   master="${master_prefix}${i}"
   echo "Starting Master ${master}..."
   multipass launch -c ${cpus} -m ${memory}g -n ${master} --cloud-init kubernetes.yaml
+  if [ -e ca.crt ] && [ -e ca.key ]; then
+    multipass transfer ca.crt ca.key ${master}:/tmp/
+  fi
 done
 
 # Start VMs for the Worker nodes
@@ -85,14 +97,18 @@ for i in $(seq 1 ${workers}); do
   multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml
 done
 
+# Configure Kubeadm
+master="${master_prefix}1"
+if [[ ${masters} > 1 ]]; then ctrlEndpoint="${proxy_hostname}.local"; else ctrlEndpoint=""; fi
+multipass exec ${master} -- sudo kubernetes-create-config.sh ${podCIDR} ${svcCIDR} ${ctrlEndpoint}
+
 # Configure Control Plane nodes
 if [[ ${masters} > 1 ]]; then
   echo "Configuring Load Balancer..."
   multipass launch -c 1 -m 1g -n ${proxy_hostname} --cloud-init load-balancer.yaml
   multipass exec ${proxy_hostname} -- sudo /etc/haproxy/setup.sh ${masters} ${master_prefix}
-  master="${master_prefix}1"
   echo "Initializing primary master node ${master}..."
-  multipass exec ${master} -- sudo kubernetes-setup-primary-master.sh ${proxy_hostname}.local
+  multipass exec ${master} -- sudo kubernetes-setup-primary-master.sh ${id}
   multipass transfer ${master}:/tmp/setup_secondary_master.sh .
   multipass transfer ${master}:/tmp/setup_worker.sh .
   for i in $(seq 2 ${masters}); do
@@ -102,12 +118,13 @@ if [[ ${masters} > 1 ]]; then
     multipass exec ${master} -- sudo bash kubernetes-setup-secondary-master.sh
   done
 else
-  master="${master_prefix}1"
   echo "Initializing single master node ${master}..."
-  multipass exec ${master} -- sudo kubernetes-setup-single-master.sh
+  multipass exec ${master} -- sudo kubernetes-setup-single-master.sh ${id}
   multipass transfer ${master}:/tmp/setup_worker.sh .
 fi
-multipass transfer ${master_prefix}1:/home/ubuntu/.kube/config kube_config.conf
+
+# Copy configuration
+multipass transfer ${master_prefix}1:/home/ubuntu/.kube/config ${kube_config}
 
 # Configure Worker nodes
 for i in $(seq 1 ${workers}); do
@@ -119,6 +136,6 @@ done
 
 # Finalizing
 rm -f ./setup_secondary_master.sh ./setup_worker.sh
-echo 'To access the cluster locally use:'
-echo 'export KUBECONFIG=$(pwd)/kube_config.conf'
-echo 'Done!'
+echo "To access the cluster locally use:"
+echo "export KUBECONFIG=$(pwd)/${kube_config}"
+echo "Done!"

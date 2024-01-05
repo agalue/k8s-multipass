@@ -33,7 +33,7 @@ write_files:
       exit
     fi
     masters=${1-3}
-    master_prefix=${2-k8smaster}
+    master_prefix=${2-k8s-master}
     cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
     cat <<EOF | sudo tee -a /etc/haproxy/haproxy.cfg
     frontend kube-apiserver
