@@ -78,7 +78,7 @@ echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   exit
 fi
-echo "Creating Kubernetes cluster..."
+echo "Creating Kubernetes cluster ${domain}..."
 
 # Start VMs for the Master nodes
 for i in $(seq 1 ${masters}); do

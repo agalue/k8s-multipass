@@ -169,9 +169,8 @@ packages:
 
 runcmd:
 - systemctl restart systemd-sysctl
-- systemctl restart systemd-resolved.service
-- systemctl start mdns@ens3.service
-- systemctl enable mdns@ens3.service
+- systemctl restart systemd-resolved
+- systemctl --now enable mdns@ens3
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
 - systemctl stop apparmor

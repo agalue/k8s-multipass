@@ -38,7 +38,9 @@ helm repo update
 i=1
 for ctx in "east" "west"; do
   kubectl config use-context ${ctx}
-  helm install metallb metallb/metallb -n metallb-system --create-namespace --wait
+  helm install metallb metallb/metallb \
+    --namespace metallb-system --create-namespace \
+    --set speaker.frr.enabled=false --wait
   cat <<EOF | kubectl apply -f -
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
