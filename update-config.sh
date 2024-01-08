@@ -1,6 +1,6 @@
 #!/usr/local/bin/bash
 
-set -e
+set -eu
 
 for cmd in "multipass" "openssl" "kubectl"; do
   type $cmd >/dev/null 2>&1 || { echo >&2 "$cmd required but it's not installed; aborting."; exit 1; }
@@ -8,7 +8,7 @@ done
 
 domain=${1-east}
 user="${domain}-admin"
-fileName="${domain}_kube_config.conf"
+fileName="${domain}-kubeconfig.conf"
 
 multipass transfer ${domain}-master1:/home/ubuntu/.kube/config ${fileName}
 
@@ -39,4 +39,7 @@ kubectl get csr ${user} -o jsonpath='{.status.certificate}' | base64 -d > ${user
 kubectl config set-credentials ${user} --client-certificate=${user}.crt --client-key=${user}.key --embed-certs=true
 kubectl config set-context ${domain} --user=${user} --cluster=${domain}
 kubectl config use-context ${domain}
-kubectl config view --kubeconfig=${fileName} --minify --flatten > ${domain}_kube_config_v2.conf
+kubectl config view --kubeconfig=${fileName} --minify --flatten > ${fileName}.tmp
+
+mv -f ${fileName}.tmp ${fileName}
+rm -f ${user}.*

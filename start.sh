@@ -56,7 +56,7 @@ fi
 proxy_hostname="${domain}-main"
 master_prefix="${domain}-master"
 worker_prefix="${domain}-worker"
-kube_config="${domain}_kube_config.conf"
+kubeconfig="${domain}-kubeconfig.conf"
 
 # Infrastructure Verification
 nodes=$(($masters + $workers))
@@ -122,7 +122,7 @@ else
 fi
 
 # Copy configuration
-multipass transfer ${master_prefix}1:/home/ubuntu/.kube/config ${kube_config}
+multipass transfer ${master_prefix}1:/home/ubuntu/.kube/config ${kubeconfig}
 
 # Configure Worker nodes
 for i in $(seq 1 ${workers}); do
@@ -135,5 +135,5 @@ done
 # Finalizing
 rm -f ./setup_secondary_master.sh ./setup_worker.sh
 echo "To access the cluster locally use:"
-echo "export KUBECONFIG=$(pwd)/${kube_config}"
+echo "export KUBECONFIG=$(pwd)/${kubeconfig}"
 echo "Done!"

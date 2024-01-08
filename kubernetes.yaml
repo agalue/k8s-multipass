@@ -86,6 +86,9 @@ write_files:
       --set ipam.mode=kubernetes \
       --set encryption.enabled=true \
       --set encryption.type=wireguard \
+      --set devices=ens+ \
+      --set l2announcements.enabled=true \
+      --set externalIPs.enabled=true \
       --set hubble.relay.enabled=true \
       --set hubble.ui.enabled=true
 
@@ -120,6 +123,10 @@ write_files:
     networking:
       podSubnet: "${podSubnet}"
       serviceSubnet: "${serviceSubnet}"
+    ---
+    kind: KubeletConfiguration
+    apiVersion: kubelet.config.k8s.io/v1beta1
+    cgroupDriver: systemd
     EOF
 
 - path: /usr/local/bin/kubernetes-setup-single-master.sh
@@ -171,6 +178,7 @@ runcmd:
 - systemctl restart systemd-sysctl
 - systemctl restart systemd-resolved
 - systemctl --now enable mdns@ens3
+- ufw disable
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
 - systemctl stop apparmor
@@ -182,4 +190,5 @@ runcmd:
 - mkdir -p /etc/containerd
 - containerd config default | sed '/SystemdCgroup/s/false/true/' > /etc/containerd/config.toml
 - systemctl restart containerd
+- systemctl enable containerd
 - kubernetes-install.sh
