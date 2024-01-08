@@ -1,6 +1,5 @@
-*kube_config*.conf
+*kubeconfig*.conf
 *.csr
 *.key
 *.crt
-setup_secondary_master.sh
-setup_worker.sh
+setup*.sh
