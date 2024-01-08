@@ -1,12 +1,14 @@
 # Kubernetes Cluster with Multipass
 
-This repository contains a script to set up a simple Kubernetes cluster via [Kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/) for learning purposes. It deploys Kubernetes version 1.29 using [Cilium](https://cilium.io/) as CNI without Kubeproxy. It will create Ubuntu 22.04 LTS VMs on your machine using [Multipass](https://multipass.run/).
+This repository contains a script to set up a simple Kubernetes cluster via [Kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/) for learning purposes. It deploys Kubernetes version 1.29 using [Cilium](https://cilium.io/) as CNI without Kubeproxy with encryption enabled. It will create Ubuntu 22.04 LTS VMs on your machine using [Multipass](https://multipass.run/).
 
 This allows you to deploy either a single master or a multi-master deployment.
 
 ## Requirements
 
 Make sure you have [multipass](https://multipass.run/) and [kubectl](https://kubectl.docs.kubernetes.io/) installed on your machine.
+
+Additionally, if you plan to manage [Cilium](https://cilium.io/) from your machine, ensure you have the [CLI installed](https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/#install-the-cilium-cli); or use it from any of the master nodes.
 
 ## Start the cluster
 
@@ -16,35 +18,22 @@ The following starts a cluster with 3 masters behind a proxy and 3 workers with 
 ./start.sh --workers 3 --cpus 2 --memory 16
 ```
 
-Default values are:
+To learn about all the options and its default values, run the following command:
 
-* 3 master nodes (`--masters`) - use 1 for a single master
-* 2 worker nodes (`--workers`)
-* 2 CPUs per VM (`--cpus`)
-* 8 GB of RAM per VM (`--memory`)
-* 50 GB for Disk per worker VM (`--disk`)
-* All node kinds share the same CPU and Memory.
+```bash=
+./start.sh -h
+```
 
 The cluster is initialized using [cloud-init](https://cloudinit.readthedocs.io/en/latest/), and all the detailes live inside the [kubernetes.yaml](./kubernetes.yaml) file.
 
 ## Interact with the cluster
 
-If you choose to have only one master, open a session against the master:
+Import the `kubeconfig` configuration on your machine:
 
 ```bash=
-multipass shell k8smaster
-```
-
-From there, `kubectl` is already configured for the default user (i.e., `ubuntu`), and the alias `k` can be used. In both cases, bash-completion is enabled.
-
-However, if you choose to have multiple master servers, an additional load balancer was configured, and you can do the following from hour machine (assuming you have `kubectl` installed):
-
-```bash=
-export KUBECONFIG=$(pwd)/kube_config.conf
+export KUBECONFIG=$(pwd)/k8s_kube_config.conf
 kubectl get nodes
 ```
-
-> The `kube_config.conf` file was created by the `start.sh` script and should use the LB to access the cluster.
 
 ## Clean up
 

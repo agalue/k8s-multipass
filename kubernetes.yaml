@@ -70,29 +70,74 @@ write_files:
   content: |
     #!/bin/bash
     set -e
-    snap install helm --classic
-    helm repo add cilium https://helm.cilium.io/
-    helm repo update
+    id=${1-1}
+    version=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
+    curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${version}/cilium-linux-amd64.tar.gz
+    tar xzvfC cilium-linux-amd64.tar.gz /usr/local/bin
     export KUBECONFIG=/etc/kubernetes/admin.conf
-    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
-    helm install cilium cilium/cilium -n kube-system \
-      --set kubeProxyReplacement=true \
-      --set k8sServiceHost=${ipaddr} \
-      --set k8sServicePort=6443 \
-      --set operator.replicas=1 \
+    if [ -e /tmp/ca.crt ] && [ -e /tmp/ca.key ]; then
+      kubectl create secret generic cilium-ca -n kube-system --from-file=/tmp/ca.crt --from-file=/tmp/ca.key
+      kubectl label secret -n kube-system cilium-ca app.kubernetes.io/managed-by=Helm
+      kubectl annotate secret -n kube-system cilium-ca meta.helm.sh/release-name=cilium
+      kubectl annotate secret -n kube-system cilium-ca meta.helm.sh/release-namespace=kube-system
+    fi
+    cilium install --wait \
+      --set cluster.id=${id} \
+      --set ipam.mode=kubernetes \
+      --set encryption.enabled=true \
+      --set encryption.type=wireguard \
+      --set devices=ens+ \
+      --set l2announcements.enabled=true \
+      --set externalIPs.enabled=true \
       --set hubble.relay.enabled=true \
-      --set hubble.ui.enabled=true \
-      --wait
+      --set hubble.ui.enabled=true
+
+- path: /usr/local/bin/kubernetes-create-config.sh
+  permissions: '0755'
+  content: |
+    #!/bin/bash
+    set -e
+    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
+    hostname=$(hostname)
+    clusterName=${hostname%-*}
+    podSubnet=${1-10.244.0.0/16}
+    serviceSubnet=${2-10.96.0.0/12}
+    if [ "${3}" == "" ]; then
+      ctrlEndpoint=$ipaddr
+    else
+      ctrlEndpoint=$(dig ${3} +short)
+    fi
+    cat <<EOF > /etc/kubernetes/kubeadm-config.yaml
+    ---
+    apiVersion: kubeadm.k8s.io/v1beta3
+    kind: InitConfiguration
+    localAPIEndpoint:
+      advertiseAddress: "${ipaddr}"
+    skipPhases:
+    - addon/kube-proxy
+    ---
+    apiVersion: kubeadm.k8s.io/v1beta3
+    kind: ClusterConfiguration
+    clusterName: "${clusterName}"
+    controlPlaneEndpoint: "${ctrlEndpoint}"
+    networking:
+      podSubnet: "${podSubnet}"
+      serviceSubnet: "${serviceSubnet}"
+    ---
+    kind: KubeletConfiguration
+    apiVersion: kubelet.config.k8s.io/v1beta1
+    cgroupDriver: systemd
+    EOF
 
 - path: /usr/local/bin/kubernetes-setup-single-master.sh
   permissions: '0755'
   content: |
     #!/bin/bash
     set -e
-    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
-    kubeadm init --apiserver-advertise-address=${ipaddr} --pod-network-cidr=10.244.0.0/16 --skip-phases=addon/kube-proxy
+    id=${1-1}
+    kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml
     kubeadm token create --print-join-command > /tmp/setup_worker.sh
-    /usr/local/bin/kubernetes-setup-cni.sh
+    /usr/local/bin/kubernetes-setup-cni.sh ${id}
     /usr/local/bin/kubernetes-setup-kubectl.sh
 
 - path: /usr/local/bin/kubernetes-setup-primary-master.sh
@@ -100,14 +145,12 @@ write_files:
   content: |
     #!/bin/bash
     set -e
-    proxy_fqdn=${1-k8smain.local}
-    ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
-    kubeadm init --apiserver-advertise-address=${ipaddr} --pod-network-cidr=10.244.0.0/16 --skip-phases=addon/kube-proxy \
-      --control-plane-endpoint=${proxy_fqdn}:6443 --upload-certs
+    id=${1-1}
+    kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml --upload-certs
     cert_key=$(sudo kubeadm init phase upload-certs --upload-certs | tail -n 1)
     kubeadm token create --print-join-command --certificate-key $cert_key > /tmp/setup_secondary_master.sh
     kubeadm token create --print-join-command > /tmp/setup_worker.sh
-    /usr/local/bin/kubernetes-setup-cni.sh
+    /usr/local/bin/kubernetes-setup-cni.sh ${id}
     /usr/local/bin/kubernetes-setup-kubectl.sh
 
 - path: /usr/local/bin/kubernetes-setup-secondary-master.sh
@@ -133,9 +176,9 @@ packages:
 
 runcmd:
 - systemctl restart systemd-sysctl
-- systemctl restart systemd-resolved.service
-- systemctl start mdns@ens3.service
-- systemctl enable mdns@ens3.service
+- systemctl restart systemd-resolved
+- systemctl --now enable mdns@ens3
+- ufw disable
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
 - systemctl stop apparmor
@@ -147,4 +190,5 @@ runcmd:
 - mkdir -p /etc/containerd
 - containerd config default | sed '/SystemdCgroup/s/false/true/' > /etc/containerd/config.toml
 - systemctl restart containerd
+- systemctl enable containerd
 - kubernetes-install.sh
