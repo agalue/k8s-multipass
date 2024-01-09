@@ -102,8 +102,8 @@ master="${master_prefix}1"
 if [[ ${masters} > 1 ]]; then
   echo "Configuring Load Balancer..."
   multipass launch -c 1 -m 1g -n ${proxy_hostname} --cloud-init load-balancer.yaml
-  proxy_ip=$(multipass list --format json | jq -r ".list[]|select(.name|test(\"${proxy_hostname}\"))|.ipv4[0]")
-  addresses=$(multipass list --format json | jq -r "[.list[]|select(.name|test(\"master\"))|.ipv4[0]]|join(\" \")")
+  proxy_ip=$(multipass info ${proxy_hostname} | grep IPv4 | awk '{print $2}')
+  addresses=$(multipass info ${master_prefix}{1..${masters}} | grep IPv4 | awk '{print $2}' | tr '\n' ' ')
   multipass exec ${proxy_hostname} -- sudo /etc/haproxy/setup.sh "${master_prefix}" "${addresses}"
   echo "Initializing primary master node ${master}..."
   multipass exec ${master} -- sudo kubernetes-create-config.sh ${podCIDR} ${svcCIDR} ${proxy_ip}
