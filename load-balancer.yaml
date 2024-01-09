@@ -38,8 +38,8 @@ write_files:
       master="${master_prefix}${i}"
       cat <<EOF | sudo tee -a /etc/haproxy/haproxy.cfg
         server ${master} ${ip}:6443 check
-      ((i++))
     EOF
+      ((i++))
     done
     touch /etc/haproxy.configured
     sudo systemctl restart haproxy
