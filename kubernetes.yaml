@@ -3,20 +3,6 @@ package_upgrade: true
 
 write_files:
 
-- path: /etc/systemd/resolved.conf
-  append: true
-  content: |
-    MulticastDNS=yes
-
-- path: /etc/systemd/system/mdns@.service
-  content: |
-    [Service]
-    Type=oneshot
-    ExecStart=/usr/bin/resolvectl mdns %i yes
-    After=sys-subsystem-net-devices-%i.device
-    [Install]
-    WantedBy=sys-subsystem-net-devices-%i.device
-
 - path: /etc/modules-load.d/containerd.conf
   content: |
     overlay
@@ -38,7 +24,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    set -e
+    set -eu
     DEBIAN_FRONTEND=noninteractive
     VERSION=v1.29
     curl -fsSL https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -51,7 +37,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    set -e
+    set -eu
     kubectl completion bash > /etc/bash_completion.d/kubectl
     user=ubuntu
     home=/home/$user
@@ -69,7 +55,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    set -e
+    set -eu
     id=${1-1}
     version=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
     curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${version}/cilium-linux-amd64.tar.gz
@@ -96,17 +82,13 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    set -e
+    set -eu
     ipaddr=$(ifconfig | grep 'inet[^6]' | awk '{print $2}' | grep -v '127.0.0.1')
     hostname=$(hostname)
     clusterName=${hostname%-*}
     podSubnet=${1-10.244.0.0/16}
     serviceSubnet=${2-10.96.0.0/12}
-    if [ "${3}" == "" ]; then
-      ctrlEndpoint=$ipaddr
-    else
-      ctrlEndpoint=$(dig ${3} +short)
-    fi
+    ctrlEndpoint=${3-${ipaddr}}
     cat <<EOF > /etc/kubernetes/kubeadm-config.yaml
     ---
     apiVersion: kubeadm.k8s.io/v1beta3
@@ -133,7 +115,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    set -e
+    set -eu
     id=${1-1}
     kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml
     kubeadm token create --print-join-command > /tmp/setup_worker.sh
@@ -144,7 +126,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    set -e
+    set -eu
     id=${1-1}
     kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml --upload-certs
     cert_key=$(sudo kubeadm init phase upload-certs --upload-certs | tail -n 1)
@@ -157,7 +139,7 @@ write_files:
   permissions: '0755'
   content: |
     #!/bin/bash
-    set -e
+    set -eu
     if ! [ -f "/tmp/setup_secondary_master.sh" ]; then
       echo "Cannot find join script..."
       exit
@@ -176,8 +158,6 @@ packages:
 
 runcmd:
 - systemctl restart systemd-sysctl
-- systemctl restart systemd-resolved
-- systemctl --now enable mdns@ens3
 - ufw disable
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
