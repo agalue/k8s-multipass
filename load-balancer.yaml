@@ -3,20 +3,6 @@ package_upgrade: true
 
 write_files:
 
-- path: /etc/systemd/resolved.conf
-  append: true
-  content: |
-    MulticastDNS=yes
-
-- path: /etc/systemd/system/mdns@.service
-  content: |
-    [Service]
-    Type=oneshot
-    ExecStart=/usr/bin/resolvectl mdns %i yes
-    After=sys-subsystem-net-devices-%i.device
-    [Install]
-    WantedBy=sys-subsystem-net-devices-%i.device
-
 - path: /etc/sysctl.d/no-ipv6.conf
   content: |
     net.ipv6.conf.all.disable_ipv6     = 1
@@ -64,9 +50,6 @@ packages:
 
 runcmd:
 - systemctl restart systemd-sysctl
-- systemctl restart systemd-resolved.service
-- systemctl start mdns@ens3.service
-- systemctl enable mdns@ens3.service
 - timedatectl set-timezone America/New_York
 - timedatectl set-ntp on
 - systemctl stop apparmor
