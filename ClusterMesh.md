@@ -16,8 +16,8 @@ step certificate create \
 Use the following to deploy two clusters with a single master and two worker nodes:
 
 ```bash=
-yes | ./start.sh --masters 1 --domain east --id 1 --podCIDR 10.1.0.0/16 --svcCIDR 11.1.0.0/16
-yes | ./start.sh --masters 1 --domain west --id 2 --podCIDR 10.2.0.0/16 --svcCIDR 11.2.0.0/16
+yes | ./start.sh --masters 1 --domain east --id 1 --podCIDR 10.11.0.0/16 --svcCIDR 10.12.0.0/16
+yes | ./start.sh --masters 1 --domain west --id 2 --podCIDR 10.21.0.0/16 --svcCIDR 10.22.0.0/16
 ```
 
 > Ensure both clusters have different values for `domain`, `id`, `podCIDR`, and `svcCIDR`. As all the nodes from both clusters can reach each other, we have the networking requirements for Cluster Mesh.

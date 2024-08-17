@@ -19,7 +19,8 @@ write_files:
       exit
     fi
     master_prefix=${1-k8s-master}
-    addresses=${2} # space separated list of IP addresses
+    shift
+    addresses=$@ # list of IP addresses
     cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
     cat <<EOF | sudo tee -a /etc/haproxy/haproxy.cfg
     frontend kube-apiserver
@@ -34,7 +35,7 @@ write_files:
         default-server inter 10s downinter 5s rise 2 fall 2 slowstart 60s maxconn 250 maxqueue 256 weight 100
     EOF
     i=1
-    for ip in ${addresses}; do
+    for ip in ${addresses[@]}; do
       master="${master_prefix}${i}"
       cat <<EOF | sudo tee -a /etc/haproxy/haproxy.cfg
         server ${master} ${ip}:6443 check

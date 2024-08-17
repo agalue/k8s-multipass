@@ -4,6 +4,25 @@ set -euo pipefail
 trap 's=$?; echo >&2 "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
 type multipass >/dev/null 2>&1 || { echo >&2 "multipass required but it's not installed; aborting."; exit 1; }
 
+# Function to check if a VM exists
+vm_exists() {
+  multipass info "$1" &>/dev/null
+  return $?
+}
+
+# Function to launch a VM if it doesn't exist, with custom parameters
+launch_vm() {
+  local vm_name="$1"
+  shift  # Remove the first argument (vm_name) from the list
+
+  if vm_exists "$vm_name"; then
+    echo "VM '$vm_name' already exists. Skipping launch."
+  else
+    echo "Starting VM '$vm_name'"
+    multipass launch --name "$vm_name" "$@"
+  fi
+}
+
 # Configurable Environment variables
 domain="k8s"
 id="1"
@@ -28,7 +47,7 @@ Parameters:
 --workers num  Number of workers (default: $workers)
 --cpus num     Number of CPUs per VM (default: $cpus)
 --memory num   Amount of Memory in GB per VM (default: $memory)
---disk num     Amount of Disk in GB per worker VM (default: $disk)
+--disk num     Amount of Disk in GB per VM (default: $disk)
 EOF
   exit
 fi
@@ -67,10 +86,10 @@ if [[ ${masters} > 1 ]]; then
   total_cpus=$(($total_cpus + 1))
   total_memory=$(($total_memory + 1))
 fi
-echo "Creating cluster using ${masters} masters, ${workers} workers; each VM with ${cpus} CPUs, ${memory}GB of RAM; workers will have ${disk}GB of Disk."
+echo "Creating cluster using ${masters} masters, ${workers} workers; each VM with ${cpus} CPUs, ${memory}GB of RAM. All VMs will have ${disk}GB of Disk."
 echo "This environment requires ${nodes} VMs, using ${total_cpus} CPUs and ${total_memory}GB of RAM from your machine."
 if [[ ${masters} > 1 ]]; then
-  echo "An additional VM with 1 CPU and 1GB of RAM will be started as the Load Balancer."
+  echo "An additional VM with 1 CPU and 1GB of RAM will be started as the Load Balancer for API servers."
 fi
 
 read -p "Do you want to proceed? [y/n]" -n 1 -r
@@ -83,8 +102,7 @@ echo "Creating Kubernetes cluster ${domain}..."
 # Start VMs for the Master nodes
 for i in $(seq 1 ${masters}); do
   master="${master_prefix}${i}"
-  echo "Starting Master ${master}..."
-  multipass launch -c ${cpus} -m ${memory}g -n ${master} --cloud-init kubernetes.yaml
+  launch_vm ${master} -c ${cpus} -m ${memory}g -d ${disk}g --cloud-init kubernetes.yaml
   if [ -e ca.crt ] && [ -e ca.key ]; then
     multipass transfer ca.crt ca.key ${master}:/tmp/
   fi
@@ -93,18 +111,20 @@ done
 # Start VMs for the Worker nodes
 for i in $(seq 1 ${workers}); do
   worker="${worker_prefix}${i}"
-  echo "Starting Worker ${worker}..."
-  multipass launch -c ${cpus} -m ${memory}g -d ${disk}g -n ${worker} --cloud-init kubernetes.yaml
+  launch_vm ${worker} -c ${cpus} -m ${memory}g -d ${disk}g --cloud-init kubernetes.yaml
 done
 
 # Configure Control Plane nodes
 master="${master_prefix}1"
 if [[ ${masters} > 1 ]]; then
+  launch_vm ${proxy_hostname} -c 1 -m 1g --cloud-init load-balancer.yaml
   echo "Configuring Load Balancer..."
-  multipass launch -c 1 -m 1g -n ${proxy_hostname} --cloud-init load-balancer.yaml
   proxy_ip=$(multipass info ${proxy_hostname} | grep IPv4 | awk '{print $2}')
-  addresses=$(multipass info ${master_prefix}{1..${masters}} | grep IPv4 | awk '{print $2}' | tr '\n' ' ')
-  multipass exec ${proxy_hostname} -- sudo /etc/haproxy/setup.sh "${master_prefix}" "${addresses}"
+  declare -a addresses
+  for i in $(seq 1 ${masters}); do
+    addresses+=($(multipass info ${master_prefix}${i} | grep IPv4 | awk '{print $2}'))
+  done
+  multipass exec ${proxy_hostname} -- sudo /etc/haproxy/setup.sh ${master_prefix} ${addresses[*]}
   echo "Initializing primary master node ${master}..."
   multipass exec ${master} -- sudo kubernetes-create-config.sh ${podCIDR} ${svcCIDR} ${proxy_ip}
   multipass exec ${master} -- sudo kubernetes-setup-primary-master.sh ${id}

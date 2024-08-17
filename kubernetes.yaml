@@ -26,7 +26,7 @@ write_files:
     #!/bin/bash
     set -eu
     DEBIAN_FRONTEND=noninteractive
-    VERSION=v1.29
+    VERSION=v1.31
     curl -fsSL https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
     apt-get update
@@ -70,13 +70,16 @@ write_files:
     cilium install --wait \
       --set cluster.id=${id} \
       --set ipam.mode=kubernetes \
+      --set envoy.enabled=false \
       --set encryption.enabled=true \
       --set encryption.type=wireguard \
       --set devices=ens+ \
       --set l2announcements.enabled=true \
       --set externalIPs.enabled=true \
-      --set hubble.relay.enabled=true \
-      --set hubble.ui.enabled=true
+      --set socketLB.enabled=true \
+      --set socketLB.hostNamespaceOnly=true \
+      --set k8sClientRateLimit.qps=50 \
+      --set k8sClientRateLimit.burst=100
 
 - path: /usr/local/bin/kubernetes-create-config.sh
   permissions: '0755'
@@ -91,14 +94,14 @@ write_files:
     ctrlEndpoint=${3-${ipaddr}}
     cat <<EOF > /etc/kubernetes/kubeadm-config.yaml
     ---
-    apiVersion: kubeadm.k8s.io/v1beta3
+    apiVersion: kubeadm.k8s.io/v1beta4
     kind: InitConfiguration
     localAPIEndpoint:
       advertiseAddress: "${ipaddr}"
     skipPhases:
     - addon/kube-proxy
     ---
-    apiVersion: kubeadm.k8s.io/v1beta3
+    apiVersion: kubeadm.k8s.io/v1beta4
     kind: ClusterConfiguration
     clusterName: "${clusterName}"
     controlPlaneEndpoint: "${ctrlEndpoint}"
